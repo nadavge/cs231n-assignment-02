@@ -74,7 +74,21 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        if not hidden_dims:
+            self.params["W1"] = np.random.normal(0.0, scale=weight_scale, size=(input_dim, num_classes))
+            self.params["b1"] = np.zeros(num_classes)
+
+        else:
+            self.params["W1"] = np.random.normal(0.0, scale=weight_scale, size=(input_dim, hidden_dims[0]))
+            self.params["b1"] = np.zeros(hidden_dims[0])
+
+            for l in range(len(hidden_dims)-1):
+                self.params[f"W{l+2}"] = np.random.normal(0.0, scale=weight_scale, size=(hidden_dims[l], hidden_dims[l+1]))
+                self.params[f"b{l+2}"] = np.zeros(hidden_dims[l+1])
+            
+            self.params[f"W{self.num_layers}"] = np.random.normal(0.0, scale=weight_scale, size=(hidden_dims[-1], num_classes))
+            self.params[f"b{self.num_layers}"] = np.zeros(num_classes)
+
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -148,8 +162,18 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # TODO implement batch norm and so on
+        out = np.reshape(X, (X.shape[0], np.prod(X.shape[1:])))
+        cache = [dict() for _ in range(self.num_layers)]
 
+        for l in range(self.num_layers-1):
+            out, cache[l]["affine"] = affine_forward(out, self.params[f"W{l+1}"], self.params[f"b{l+1}"])
+            out, cache[l]["relu"] = relu_forward(out)
+
+        # Last layer
+        out, cache[self.num_layers-1]["affine"] = affine_forward(out, self.params[f"W{self.num_layers}"], self.params[f"b{self.num_layers}"])
+
+        scores = out
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -175,7 +199,18 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # Last layer's input is the scores and their gradients, as opposed to relus
+        loss, dout = softmax_loss(scores, y)
+
+        for l in range(self.num_layers, 0, -1):
+            dout, grads[f"W{l}"], grads[f"b{l}"] = affine_backward(dout, cache[l-1]["affine"])
+            grads[f"W{l}"] += 2*self.reg*self.params[f"W{l}"]
+            grads[f"b{l}"] += 2*self.reg*self.params[f"b{l}"]
+            loss += self.reg*(self.params[f"W{l}"]*self.params[f"W{l}"]).sum()
+
+            # There's no ReLU before the first layer
+            if l > 1:
+                dout = relu_backward(dout, cache[l-2]["relu"])
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
