@@ -83,14 +83,14 @@ class FullyConnectedNet(object):
         else:
             self.params["W1"] = np.random.normal(0.0, scale=weight_scale, size=(input_dim, hidden_dims[0]))
             self.params["b1"] = np.zeros(hidden_dims[0])
-            if self.normalization == "batchnorm":
+            if self.normalization:
                 self.params["gamma1"] = np.ones(hidden_dims[0])
                 self.params["beta1"] = np.zeros(hidden_dims[0])
 
             for l in range(len(hidden_dims)-1):
                 self.params[f"W{l+2}"] = np.random.normal(0.0, scale=weight_scale, size=(hidden_dims[l], hidden_dims[l+1]))
                 self.params[f"b{l+2}"] = np.zeros(hidden_dims[l+1])
-                if self.normalization == "batchnorm":
+                if self.normalization:
                     self.params[f"gamma{l+2}"] = np.ones(hidden_dims[l+1])
                     self.params[f"beta{l+2}"] = np.zeros(hidden_dims[l+1])
             
@@ -174,10 +174,17 @@ class FullyConnectedNet(object):
         out = np.reshape(X, (X.shape[0], np.prod(X.shape[1:])))
         cache = [dict() for _ in range(self.num_layers)]
 
+        if self.normalization == "batchnorm":
+            norm_forward = batchnorm_forward
+            norm_backward = batchnorm_backward
+        elif self.normalization == "layernorm":
+            norm_forward = layernorm_forward
+            norm_backward = layernorm_backward
+
         for l in range(self.num_layers-1):
             out, cache[l]["affine"] = affine_forward(out, self.params[f"W{l+1}"], self.params[f"b{l+1}"])
-            if self.normalization == "batchnorm":
-                out, cache[l]["bn"] = batchnorm_forward(out, self.params[f"gamma{l+1}"], self.params[f"beta{l+1}"], self.bn_params[l])
+            if self.normalization:
+                out, cache[l]["bn"] = norm_forward(out, self.params[f"gamma{l+1}"], self.params[f"beta{l+1}"], self.bn_params[l])
             out, cache[l]["relu"] = relu_forward(out)
 
         # Last layer
@@ -221,8 +228,8 @@ class FullyConnectedNet(object):
             # There's no ReLU before the first layer
             if l > 1:
                 dout = relu_backward(dout, cache[l-2]["relu"])
-                if self.normalization == "batchnorm":
-                    dout, grads[f"gamma{l-1}"], grads[f"beta{l-1}"] = batchnorm_backward(dout, cache[l-2]["bn"])
+                if self.normalization:
+                    dout, grads[f"gamma{l-1}"], grads[f"beta{l-1}"] = norm_backward(dout, cache[l-2]["bn"])
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################

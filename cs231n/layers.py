@@ -203,6 +203,9 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     mode = bn_param["mode"]
     eps = bn_param.get("eps", 1e-6)
     momentum = bn_param.get("momentum", 0.9)
+    # Layer-norm is a hack to allow reuse of code, as layer-norm is simply
+    # batch-norm with the dimensions transposed.
+    layernorm = bn_param.get("layernorm", False)
 
     N, D = x.shape
     running_mean = bn_param.get("running_mean", np.zeros(D, dtype=x.dtype))
@@ -233,17 +236,20 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         #######################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        mean = np.mean(x, axis=0)
-        var = np.var(x, axis=0)
+        mean : np.ndarray = np.mean(x, axis=0)
+        var : np.ndarray= np.var(x, axis=0)
 
-        zm_x = (x - mean) # Zero-mean X
-        var_t = var+eps
-        std_t = np.sqrt(var_t)
-        norm_x = zm_x/std_t
+        zm_x  : np.ndarray = (x - mean) # Zero-mean X
+        var_t  : np.ndarray = var+eps
+        std_t : np.ndarray = np.sqrt(var_t)
+        norm_x : np.ndarray = zm_x/std_t
 
-        cache = (x, zm_x, norm_x, gamma, beta, mean, var, std_t, var_t, eps)
+        cache = (x, zm_x, norm_x, gamma, beta, mean, var, std_t, var_t, eps, layernorm)
 
-        out = (gamma*norm_x)+beta
+        if layernorm:
+            out = ((gamma*norm_x.T)+beta).T
+        else:
+            out = (gamma*norm_x)+beta
     
         running_mean = (momentum*running_mean) + ((1.0-momentum)*mean)
         running_var = (momentum*running_var) + ((1.0-momentum)*var_t)
@@ -304,11 +310,16 @@ def batchnorm_backward(dout, cache):
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
     N, D = dout.shape
-    (x, zm_x, norm_x, gamma, beta, mean, var, std_t, var_t, eps) = cache
+    (x, zm_x, norm_x, gamma, beta, mean, var, std_t, var_t, eps, layernorm) = cache
 
-    dnorm_x = gamma*dout
-    dgamma = np.sum(dout*norm_x, axis=0)
-    dbeta = np.sum(dout, axis=0)
+    if layernorm:
+        dnorm_x = (gamma*(dout.T)).T
+        dgamma = np.sum(dout*norm_x, axis=1)
+        dbeta = np.sum(dout, axis=1)
+    else:
+        dnorm_x = gamma*dout
+        dgamma = np.sum(dout*norm_x, axis=0)
+        dbeta = np.sum(dout, axis=0)
     distd = np.sum(dnorm_x*zm_x, axis=0)
     dvar_t = -0.5*np.float_power(var_t, -1.5)*distd
     dsq_zm_x = np.tile(dvar_t/N, (N, 1))
@@ -409,12 +420,13 @@ def layernorm_forward(x, gamma, beta, ln_param):
 
     bn_params = {
         'mode': 'train',
-        'eps': eps
+        'eps': eps,
+        'layernorm': True
     }
 
-    gamma_t = np.expand_dims(gamma, axis=1)
-    beta_t = np.expand_dims(beta, axis=1)
-    out, cache = batchnorm_forward(x.T, np.tile(gamma_t, [1, N]), np.tile(beta_t, [1, N]), bn_params)
+    #gamma_t = np.expand_dims(gamma, axis=1)
+    #beta_t = np.expand_dims(beta, axis=1)
+    out, cache = batchnorm_forward(x.T, gamma, beta, bn_params)
     out = out.T
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -450,6 +462,7 @@ def layernorm_backward(dout, cache):
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
     dx, dgamma, dbeta = batchnorm_backward(dout.T, cache)
+    #print(f"{dgamma}")
     dx = dx.T
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
