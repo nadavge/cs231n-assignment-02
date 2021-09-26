@@ -608,8 +608,8 @@ def conv_forward_naive(x, w, b, conv_param):
     x_p = np.pad(x, [(0, 0),(0, 0),(pad, pad), (pad, pad)], constant_values=0)
     for n in range(N):
         for f in range(F):
-            for i_f, i in enumerate(range(0, H, stride)):
-                for j_f, j in enumerate(range(0, W, stride)):
+            for i_f, i in enumerate(range(0, 2*pad+H-HH+1, stride)):
+                for j_f, j in enumerate(range(0, 2*pad+W-WW+1, stride)):
                     out[n, f, i_f, j_f] = np.sum(x_p[n, :, i:i+HH, j:j+WW]*w[f]) + b[f]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -637,8 +637,33 @@ def conv_backward_naive(dout, cache):
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+    (x, w, b, conv_param) = cache
 
-    pass
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape
+
+    pad = conv_param["pad"]
+    stride = conv_param["stride"]
+
+    Ht = 1 + (H + 2 * pad - HH) // stride
+    Wt = 1 + (W + 2 * pad - WW) // stride
+
+    x_p = np.pad(x, [(0, 0),(0, 0),(pad, pad), (pad, pad)], constant_values=0)
+
+
+    dx_p = np.zeros_like(x_p)
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+    
+    for n in range(N):
+        for f in range(F):
+            for i_f, i in enumerate(range(0, 2*pad+H-HH+1, stride)):
+                for j_f, j in enumerate(range(0, 2*pad+W-WW+1, stride)):
+                    dx_p[n, :, i:i+HH, j:j+WW] += w[f]*dout[n, f, i_f, j_f]
+                    dw[f] += x_p[n, :, i:i+HH, j:j+WW]*dout[n, f, i_f, j_f]
+                    db[f] += dout[n, f, i_f, j_f]
+
+    dx = dx_p[:, :, pad:pad+H, pad:pad+W]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
