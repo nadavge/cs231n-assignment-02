@@ -698,7 +698,23 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    pool_height : int = pool_param["pool_height"]
+    pool_width : int = pool_param["pool_width"]
+    stride : int  = pool_param["stride"]
+
+    N, C, H, W = x.shape
+
+    Ht = 1 + (H - pool_height) // stride
+    Wt = 1 + (W - pool_width) // stride
+
+    out = np.zeros((N, C, Ht, Wt))
+
+    for n in range(N):
+        for c in range(C):
+            for i_o, i_x in enumerate(range(0, H, stride)):
+                for j_o, j_x in enumerate(range(0, W, stride)):
+                    out[n, c, i_o, j_o] = np.max(x[n, c, i_x:i_x+pool_height, j_x:j_x+pool_width])
+        
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -724,7 +740,26 @@ def max_pool_backward_naive(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    (x, pool_param) = cache
+
+    pool_height : int = pool_param["pool_height"]
+    pool_width : int = pool_param["pool_width"]
+    stride : int  = pool_param["stride"]
+
+    N, C, H, W = x.shape
+
+    Ht = 1 + (H - pool_height) // stride
+    Wt = 1 + (W - pool_width) // stride
+
+    dx = np.zeros((N, C, H, W))
+
+    for n in range(N):
+        for c in range(C):
+            for i_o, i_x in enumerate(range(0, H, stride)):
+                for j_o, j_x in enumerate(range(0, W, stride)):
+                    index = np.argmax(x[n, c, i_x:i_x+pool_height, j_x:j_x+pool_width])
+                    rel_max_i_x, rel_max_j_x = np.unravel_index(index, (pool_height, pool_width))
+                    dx[n, c, i_x+rel_max_i_x, j_x+rel_max_j_x] = dout[n, c, i_o, j_o]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
