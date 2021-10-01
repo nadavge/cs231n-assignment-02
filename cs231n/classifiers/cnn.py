@@ -62,8 +62,16 @@ class ThreeLayerConvNet(object):
         # the start of the loss() function to see how that happens.                #
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        (C, H, W) = input_dim 
+        w1_dims = (num_filters, C, filter_size, filter_size)
+        self.params["W1"] = np.random.normal(0, weight_scale, w1_dims)
+        self.params["b1"] = np.zeros(num_filters)
+        
+        self.params["W2"] = np.random.normal(0, weight_scale, (num_filters*H*W//4, hidden_dim))
+        self.params["b2"] = np.zeros(hidden_dim)
 
-        pass
+        self.params["W3"] = np.random.normal(0, weight_scale, (hidden_dim, num_classes))
+        self.params["b3"] = np.zeros(num_classes)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -102,7 +110,9 @@ class ThreeLayerConvNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        out, cache_conv = conv_relu_pool_forward(X, self.params["W1"], self.params["b1"], conv_param, pool_param)
+        out, cache_afrel1 = affine_relu_forward(out, self.params["W2"], self.params["b2"])
+        scores, cache_last = affine_forward(out, self.params["W3"], self.params["b3"])
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -125,7 +135,16 @@ class ThreeLayerConvNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        loss, dout = softmax_loss(scores, y)
+        dout, grads["W3"], grads["b3"] = affine_backward(dout, cache_last)
+        dout, grads["W2"], grads["b2"] = affine_relu_backward(dout, cache_afrel1)
+        dout, grads["W1"], grads["b1"] = conv_relu_pool_backward(dout, cache_conv)
+
+        for i in range(1,3+1):
+            loss += 0.5*self.reg*(np.power(self.params[f"W{i}"],2)).sum()
+            loss += 0.5*self.reg*(np.power(self.params[f"b{i}"],2)).sum()
+            grads[f"W{i}"] += self.reg*self.params[f"W{i}"]
+            grads[f"b{i}"] += self.reg*self.params[f"b{i}"]
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
