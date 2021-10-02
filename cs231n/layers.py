@@ -800,7 +800,26 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    # - x: Data of shape (N, D)
+    # - gamma: Scale parameter of shape (D,)
+    # - beta: Shift paremeter of shape (D,)
+    # - bn_param: Dictionary with the following keys:
+    #   - mode: 'train' or 'test'; required
+    #   - eps: Constant for numeric stability
+    #   - momentum: Constant for running mean / variance.
+    #   - running_mean: Array of shape (D,) giving running mean of features
+    #   - running_var Array of shape (D,) giving running variance of features
+
+    # Returns a tuple of:
+    # - out: of shape (N, D)
+    # - cache: A tuple of values needed in the backward pass
+
+    (N, C, H, W) = x.shape
+    # Move the channels to be the dimensions over-which we perform the averaging
+    x_r : np.ndarray = np.moveaxis(x, 1, -1).reshape((N*H*W, C))
+    x_r, cache = batchnorm_forward(x_r, gamma, beta, bn_param)
+    # Reverse the manipulations
+    out = np.moveaxis(x_r.reshape((N, H, W, C)), -1, 1)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -833,7 +852,12 @@ def spatial_batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    (N, C, H, W) = dout.shape
+    # Move the channels to be the dimensions over-which we perform the averaging
+    dout_r : np.ndarray = np.moveaxis(dout, 1, -1).reshape((N*H*W, C))
+    dx, dgamma, dbeta = batchnorm_backward(dout_r, cache)
+    # Reverse the manipulations
+    dx = np.moveaxis(dx.reshape((N, H, W, C)), -1, 1)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -874,7 +898,21 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    bn_params = {
+        'mode': 'train',
+        'eps': eps,
+    }
+
+    (N, C, H, W) = x.shape
+    step = C//G
+    
+    # Move the channels to be the dimensions over-which we perform the averaging
+    x_r : np.ndarray = np.moveaxis(x, 1, -1).reshape((N*H*W*step, G))
+    x_r, bn_cache = batchnorm_forward(x_r, 1, 0, bn_params)
+    cache = (bn_cache, G, gamma)
+    # Reverse the manipulations
+    out = x_r.reshape((N, H, W, C))
+    out = (np.moveaxis(out, -1, 1) * gamma) + beta
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -903,7 +941,19 @@ def spatial_groupnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    bn_cache, G, gamma = cache
+    (x, zm_x, norm_x, _, beta, mean, var, std_t, var_t, eps, layernorm) = bn_cache
+    bn_cache = (x, zm_x, norm_x, gamma, beta, mean, var, std_t, var_t, eps, layernorm)
+
+    (N, C, H, W) = dout.shape
+    step = C//G
+    
+    # Move the channels to be the dimensions over-which we perform the averaging
+    dout_r : np.ndarray = np.moveaxis(dout, 1, -1).reshape((N*H*W*step, G))
+    dx, dgamma, dbeta = batchnorm_backward(dout_r, bn_cache)
+    # Reverse the manipulations
+    out = dx.reshape((N, H, W, C))
+    out = np.moveaxis(out, -1, 1)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
