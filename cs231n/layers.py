@@ -898,21 +898,21 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    bn_params = {
-        'mode': 'train',
-        'eps': eps,
-    }
+    out, cache = None, None
+    eps = gn_param.get('eps', 1e-5)
 
-    (N, C, H, W) = x.shape
-    step = C//G
-    
-    # Move the channels to be the dimensions over-which we perform the averaging
-    x_r : np.ndarray = np.moveaxis(x, 1, -1).reshape((N*H*W*step, G))
-    x_r, bn_cache = batchnorm_forward(x_r, 1, 0, bn_params)
-    cache = (bn_cache, G, gamma)
-    # Reverse the manipulations
-    out = x_r.reshape((N, H, W, C))
-    out = (np.moveaxis(out, -1, 1) * gamma) + beta
+    N, C, H, W = x.shape
+    x = x.reshape(N, G, C // G, H, W)
+    sample_mean = np.mean(x, axis=(2, 3, 4), keepdims=True)
+    sample_var = np.var(x, axis=(2, 3, 4), keepdims=True)
+
+    vareps = sample_var + eps
+    x_normalized = (x - sample_mean) / np.sqrt(vareps)
+    out = x_normalized.reshape(N, C, H, W)
+    out = out * gamma + beta
+
+    x = x.reshape(N, C, H, W)
+    cache = (x, gamma, sample_mean, vareps, x_normalized, G)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -941,19 +941,43 @@ def spatial_groupnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    bn_cache, G, gamma = cache
-    (x, zm_x, norm_x, _, beta, mean, var, std_t, var_t, eps, layernorm) = bn_cache
-    bn_cache = (x, zm_x, norm_x, gamma, beta, mean, var, std_t, var_t, eps, layernorm)
+    x = cache[0]
+    gamma = cache[1]
+    sample_mean = cache[2]
+    vareps = cache[3]
+    x_normalized = cache[4]
+    G = cache[5]
 
-    (N, C, H, W) = dout.shape
-    step = C//G
-    
-    # Move the channels to be the dimensions over-which we perform the averaging
-    dout_r : np.ndarray = np.moveaxis(dout, 1, -1).reshape((N*H*W*step, G))
-    dx, dgamma, dbeta = batchnorm_backward(dout_r, bn_cache)
-    # Reverse the manipulations
-    out = dx.reshape((N, H, W, C))
-    out = np.moveaxis(out, -1, 1)
+    N, C, H, W = x.shape
+    D = (C//G) * H * W
+    x = x.reshape(N, G, C // G, H, W)
+
+    dbeta = np.sum(dout, axis=(0, 2, 3))
+    dbeta = dbeta.reshape(1, C, 1, 1)
+
+    x_normalized = x_normalized.reshape(N, C, H, W)
+    dgamma = np.sum(dout * x_normalized, axis=(0, 2, 3))
+    dgamma = dgamma.reshape(1, C, 1, 1)
+
+    x_mu = x - sample_mean
+    dx_norm = dout * gamma
+    dx_norm = dx_norm.reshape(N, G, C // G, H, W)
+
+    std_inv = 1/np.sqrt(vareps)
+
+    summ = np.sum(dx_norm * x_mu, axis=(2, 3, 4), keepdims=True)
+    dvar = summ * -.5 * np.power(vareps, -3/2)
+
+    dmu_term1 = np.sum((dx_norm * -std_inv), axis=(2, 3, 4), keepdims=True)
+
+    dmu = dmu_term1 + \
+        dvar * np.mean(-2. * x_mu, axis=(2, 3, 4), keepdims=True)
+
+    dx = (dx_norm * std_inv) + (dvar * 2 * x_mu / D) + (dmu / D)
+
+    dx = dx.reshape(N, C, H, W)
+
+    # Taken due to laziness from: https://melfm.github.io/posts/2018-08-Understanding-Normalization/
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
